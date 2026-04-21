@@ -1,0 +1,179 @@
+# ────────────────────────────────────────────────────────────────────────────
+# Mini-RAFT Drawing Board — Continuous Integration
+# ────────────────────────────────────────────────────────────────────────────
+# Stages:
+#   1. lint-and-validate  — structural checks (docker-compose, package.json)
+#   2. unit-tests         — Jest unit suite with coverage upload
+#   3. docker-build       — parallel matrix build of all 5 service images
+# ────────────────────────────────────────────────────────────────────────────
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+# Cancel in-flight runs for the same branch/PR (saves CI minutes)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 1 — Lint & Validate
+  # ──────────────────────────────────────────────────────────────────────────
+  lint-and-validate:
+    name: 🔍 Lint & Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 1a. Validate all package.json files parse correctly ──────────────
+      - name: Validate package.json files
+        run: |
+          echo "▶ Checking package.json files…"
+          for f in replica1/package.json replica2/package.json replica3/package.json \
+                   gateway/package.json tests/package.json; do
+            node -e "
+              const fs = require('fs');
+              try {
+                JSON.parse(fs.readFileSync('$f', 'utf8'));
+                console.log('  ✓ $f');
+              } catch (e) {
+                console.error('  ✗ $f — ' + e.message);
+                process.exit(1);
+              }
+            "
+          done
+
+      # ── 1b. Validate docker-compose.yml ─────────────────────────────────
+      - name: Validate docker-compose.yml
+        run: |
+          echo "▶ Validating docker-compose.yml…"
+          docker compose -f docker-compose.yml config --quiet
+          echo "  ✓ docker-compose.yml is valid"
+
+      # ── 1c. Ensure node_modules are not committed ────────────────────────
+      - name: Check node_modules not committed
+        run: |
+          echo "▶ Checking for committed node_modules…"
+          if git ls-files --error-unmatch node_modules 2>/dev/null || \
+             git ls-files | grep -q "^.*/node_modules/"; then
+            echo "  ✗ node_modules detected in git index — add them to .gitignore"
+            exit 1
+          fi
+          echo "  ✓ No node_modules committed"
+
+      # ── 1d. Verify all Dockerfiles exist ────────────────────────────────
+      - name: Check Dockerfiles exist
+        run: |
+          echo "▶ Checking Dockerfiles…"
+          for svc in replica1 replica2 replica3 gateway frontend; do
+            if [ ! -f "$svc/Dockerfile" ]; then
+              echo "  ✗ $svc/Dockerfile not found"
+              exit 1
+            fi
+            echo "  ✓ $svc/Dockerfile"
+          done
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 2 — Unit Tests
+  # ──────────────────────────────────────────────────────────────────────────
+  unit-tests:
+    name: 🧪 Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint-and-validate
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tests/package.json
+
+      # ── Install test dependencies ────────────────────────────────────────
+      - name: Install test dependencies
+        working-directory: tests
+        run: npm install
+
+      # ── Run unit test suite with coverage ───────────────────────────────
+      - name: Run unit tests
+        working-directory: tests
+        run: |
+          npm run test:unit -- \
+            --ci \
+            --coverage \
+            --coverageDirectory=../coverage \
+            --reporters=default \
+            --reporters=jest-junit
+        env:
+          # Suppress colour codes in CI output
+          FORCE_COLOR: '0'
+          CI: 'true'
+
+      # ── Upload coverage HTML report as artifact ──────────────────────────
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+
+      # ── Upload JUnit XML for the Actions test summary ────────────────────
+      - name: Upload JUnit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-results
+          path: tests/junit.xml
+          retention-days: 14
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 3 — Docker Build (parallel matrix across all 5 services)
+  # ──────────────────────────────────────────────────────────────────────────
+  docker-build:
+    name: 🐳 Docker Build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: unit-tests
+
+    strategy:
+      fail-fast: false        # Build all services even if one fails
+      matrix:
+        include:
+          - service: replica1
+            context: ./replica1
+          - service: replica2
+            context: ./replica2
+          - service: replica3
+            context: ./replica3
+          - service: gateway
+            context: ./gateway
+          - service: frontend
+            context: ./frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Build the image (no push, no buildkit) ───────────────────────────
+      - name: Build ${{ matrix.service }} image (Classic Builder)
+        env:
+          DOCKER_BUILDKIT: "0"
+        run: |
+          docker build -t mini-raft/${{ matrix.service }}:ci-${{ github.sha }} ${{ matrix.context }}

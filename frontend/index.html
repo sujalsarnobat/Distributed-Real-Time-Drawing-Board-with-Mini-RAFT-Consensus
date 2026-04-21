@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mini-RAFT Drawing Board</title>
+  <meta name="description"
+    content="Distributed real-time collaborative drawing board powered by Mini-RAFT consensus — create or join a Board Room to draw together." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       LOBBY SCREEN — shown on first load; hides when user enters a board room
+       ══════════════════════════════════════════════════════════════════════════ -->
+  <div id="lobby-screen" aria-label="Choose a board room" role="main">
+
+    <!-- Animated background -->
+    <div class="lobby-bg-animated" aria-hidden="true">
+      <div class="bg-gradient-1"></div>
+      <div class="bg-gradient-2"></div>
+      <div class="bg-gradient-3"></div>
+    </div>
+
+    <!-- Floating elements -->
+    <div class="floating-elements" aria-hidden="true">
+      <div class="float-element element-1">✨</div>
+      <div class="float-element element-2">🎨</div>
+      <div class="float-element element-3">💡</div>
+    </div>
+
+    <div class="lobby-card">
+
+      <!-- Premium Hero Section -->
+      <div class="lobby-hero premium">
+        <div class="hero-badge">✨ Collaborative Drawing Platform ✨</div>
+        <div class="hero-icon-container">
+          <div class="hero-icon-glow"></div>
+          <div class="hero-icon">🎨</div>
+        </div>
+        <h1 class="lobby-title premium">Canvas Studio</h1>
+        <p class="lobby-subtitle premium">
+          Real-time collaborative drawing experience<br>
+          <span class="subtitle-accent">Powered by distributed consensus</span>
+        </p>
+      </div>
+
+      <!-- Primary Action Section -->
+      <div class="primary-action-section">
+        <button class="lobby-btn lobby-btn-primary lobby-btn-large lobby-btn-premium" id="btn-create-room">
+          <span class="btn-icon-left">✨</span>
+          <span class="btn-text">Create New Room</span>
+          <span class="btn-icon-right">→</span>
+        </button>
+        <p class="action-hint">Instant setup • No registration required</p>
+      </div>
+
+      <!-- Room ID Display with Premium Styling -->
+      <div class="room-id-premium-container">
+        <div class="room-id-header">
+          <span class="room-id-label">Your Private Room ID</span>
+          <span class="room-id-copy-hint">Share with friends</span>
+        </div>
+        <div class="lobby-create-row">
+          <div class="generated-id-display premium" id="generated-id-display">
+            <span id="generated-board-id">––––––</span>
+          </div>
+          <button class="lobby-btn-icon premium" id="btn-regenerate-id" title="Generate a new Room ID">
+            🔄
+          </button>
+        </div>
+      </div>
+
+      <!-- Two-Column Actions Grid -->
+      <div class="premium-actions-grid">
+        <!-- Join Room -->
+        <div class="action-card">
+          <div class="action-card-icon">🔗</div>
+          <h3 class="action-card-title">Join Existing Room</h3>
+          <p class="action-card-desc">Connect with friends using their room ID</p>
+          <div class="lobby-input-row action-card-input">
+            <input
+              type="text"
+              id="join-board-input"
+              class="lobby-input premium"
+              placeholder="Enter room ID"
+              maxlength="64"
+              aria-label="Room ID to join"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button class="lobby-btn lobby-btn-secondary lobby-btn-compact" id="btn-join-room">
+              Join
+            </button>
+          </div>
+          <p id="join-error" class="lobby-error" aria-live="polite" hidden></p>
+        </div>
+
+        <!-- Public Board -->
+        <div class="action-card">
+          <div class="action-card-icon">🌍</div>
+          <h3 class="action-card-title">Public Canvas</h3>
+          <p class="action-card-desc">Draw instantly on the shared board</p>
+          <button class="lobby-btn lobby-btn-outline lobby-btn-full-width" id="btn-free-draw">
+            Open Public Board
+          </button>
+        </div>
+      </div>
+
+      <!-- Premium Footer -->
+      <div class="premium-footer">
+        <p class="footer-main">🚀 <strong>Start creating now</strong></p>
+        <p class="footer-sub">Seamless real-time synchronization across all participants</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       BOARD SCREEN — hidden until user joins a room
+       ══════════════════════════════════════════════════════════════════════════ -->
+  <div id="board-screen" class="board-screen-hidden" aria-label="Drawing board" role="main">
+
+    <!-- ── Header ──────────────────────────────────────────────────────────── -->
+    <header id="app-header">
+      <div class="header-left">
+        <button id="btn-leave-room" class="back-btn" title="Return to lobby" aria-label="Leave room and return to lobby">
+          ← Leave
+        </button>
+        <div class="logo">
+          <span class="logo-icon">◈</span>
+          <h1>Mini-RAFT Drawing Board</h1>
+        </div>
+        <div class="header-meta" id="leader-badge" title="Current RAFT leader">
+          <span class="meta-label">Leader</span>
+          <span class="meta-value" id="leader-name">–</span>
+        </div>
+        <!-- Room badge — shows current boardId -->
+        <div class="header-meta room-badge" id="room-badge" title="Current Room ID">
+          <span class="meta-label">Room</span>
+          <span class="meta-value" id="room-id-display">–</span>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <!-- Toolbar -->
+        <div class="toolbar" role="toolbar" aria-label="Drawing tools">
+
+          <!-- Colour palette -->
+          <div class="tool-group" id="colour-group">
+            <button class="colour-btn active" data-colour="#1f2937" style="--c:#1f2937" title="Black"
+              id="btn-colour-black"></button>
+            <button class="colour-btn" data-colour="#dc2626" style="--c:#dc2626" title="Red" id="btn-colour-red"></button>
+            <button class="colour-btn" data-colour="#16a34a" style="--c:#16a34a" title="Green"
+              id="btn-colour-green"></button>
+            <button class="colour-btn" data-colour="#2563eb" style="--c:#2563eb" title="Blue"
+              id="btn-colour-blue"></button>
+            <button class="colour-btn" data-colour="#ca8a04" style="--c:#ca8a04" title="Yellow"
+              id="btn-colour-yellow"></button>
+            <button class="colour-btn" data-colour="#7c3aed" style="--c:#7c3aed" title="Purple"
+              id="btn-colour-purple"></button>
+            <button class="colour-btn" data-colour="#ea580c" style="--c:#ea580c" title="Orange"
+              id="btn-colour-orange"></button>
+            <button class="colour-btn eraser-swatch" data-colour="eraser" style="--c:#ffffff" title="Eraser"
+              id="btn-eraser">✕</button>
+          </div>
+
+          <div class="tool-divider"></div>
+
+          <!-- Brush size -->
+          <div class="tool-group brush-group">
+            <label class="meta-label" for="brush-size">Size</label>
+            <input type="range" id="brush-size" min="2" max="32" value="4" step="1" title="Brush size" />
+            <span class="brush-preview" id="brush-preview"></span>
+          </div>
+
+          <div class="tool-divider"></div>
+
+          <!-- Actions -->
+          <button class="action-btn" id="btn-clear" title="Clear canvas (local only)">Clear</button>
+
+          <div class="tool-divider"></div>
+
+          <!-- Export -->
+          <div class="export-group" id="export-group">
+            <button class="export-btn" id="btn-export" title="Export board" aria-haspopup="true" aria-expanded="false">
+              <span class="export-icon">⬇</span> Export
+            </button>
+            <div class="export-dropdown" id="export-dropdown" role="menu">
+              <button class="export-item" id="btn-export-png" role="menuitem">
+                <span class="export-item-icon">🖼</span>
+                <span>
+                  <strong>PNG</strong>
+                  <small>Lossless image</small>
+                </span>
+              </button>
+              <button class="export-item" id="btn-export-pdf" role="menuitem">
+                <span class="export-item-icon">📄</span>
+                <span>
+                  <strong>PDF</strong>
+                  <small>Print-ready document</small>
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="connection-info">
+          <span id="queue-depth" class="queue-badge hidden" title="Strokes queued (leader unavailable)"></span>
+          <div id="status-indicator" class="status disconnected" aria-live="polite">Connecting…</div>
+          <div class="client-count" id="client-count" title="Users in this room">
+            <span class="count-icon">👥</span>
+            <span id="count-value">–</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── Canvas ───────────────────────────────────────────────────────────── -->
+    <main id="canvas-container">
+      <canvas id="drawing-canvas" aria-label="Collaborative drawing canvas"></canvas>
+
+      <!-- Overlay shown when disconnected -->
+      <div class="canvas-overlay" id="canvas-overlay" aria-hidden="false">
+        <div class="overlay-content">
+          <div class="overlay-spinner"></div>
+          <p id="overlay-message">Connecting to server…</p>
+          <p id="overlay-sub" class="overlay-sub"></p>
+        </div>
+      </div>
+    </main>
+
+    <!-- ── Toast notifications ──────────────────────────────────────────────── -->
+    <div id="toast-container" aria-live="assertive"></div>
+
+    <!-- ── Export progress modal ─────────────────────────────────────────────── -->
+    <div id="export-modal" class="export-modal hidden" role="dialog" aria-modal="true" aria-label="Export in progress">
+      <div class="export-modal-card">
+        <div class="export-modal-spinner"></div>
+        <p id="export-modal-msg">Preparing export…</p>
+      </div>
+    </div>
+
+  </div><!-- /#board-screen -->
+
+  <script src="app.js"></script>
+</body>
+
+</html>
