@@ -22,8 +22,8 @@ COPY replica2 ./replica2
 COPY replica3 ./replica3
 COPY start.sh ./start.sh
 
-# Ensure start script has execution permissions
-RUN chmod +x ./start.sh
+# Ensure start script has execution permissions and unix line endings
+RUN sed -i 's/\r$//' ./start.sh && chmod +x ./start.sh
 
 # Render exposes PORT env var at runtime (defaults to 10000)
 EXPOSE 10000
