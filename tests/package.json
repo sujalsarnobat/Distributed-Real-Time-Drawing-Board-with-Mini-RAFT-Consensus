@@ -1,0 +1,29 @@
+{
+  "name": "mini-raft-tests",
+  "version": "1.0.0",
+  "description": "Comprehensive test suite — Mini-RAFT Drawing Board",
+  "scripts": {
+    "test:unit": "jest --config jest.config.js unit/        --forceExit --testTimeout=15000",
+    "test:unit:ci": "jest --config jest.config.js unit/ --forceExit --testTimeout=15000 --ci --coverage --reporters=default --reporters=jest-junit",
+    "test:integration": "jest --config jest.config.js integration/ --forceExit --testTimeout=30000 --runInBand",
+    "test:chaos": "jest --config jest.config.js chaos/       --forceExit --testTimeout=120000 --runInBand",
+    "test": "jest --config jest.config.js              --forceExit --testTimeout=15000",
+    "test:all": "npm run test:unit && npm run test:integration && npm run test:chaos"
+  },
+  "dependencies": {
+    "axios": "^1.15.0",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-junit": "^16.0.0"
+  },
+  "jest-junit": {
+    "outputDirectory": ".",
+    "outputName": "junit.xml",
+    "classNameTemplate": "{classname}",
+    "titleTemplate": "{title}",
+    "ancestorSeparator": " > ",
+    "usePathForSuiteName": "true"
+  }
+}
